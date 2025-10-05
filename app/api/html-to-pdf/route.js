@@ -5,19 +5,18 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
+// Use the ARCH-SPECIFIC pack tar (x64 for Vercel Node.js lambdas)
 const PACK_URL =
-  'https://github.com/Sparticuz/chromium/releases/download/v129.0.0/chromium-v129.0.0-pack.tar';
-// For newer bundles, use the newest tag (e.g., v137.x) that matches your puppeteer/chrome target.
-// See releases page for the exact filename. :contentReference[oaicite:2]{index=2}
-// app/api/html-to-pdf/route.js
+  'https://github.com/Sparticuz/chromium/releases/download/v129.0.0/chromium-v129.0.0-pack.x64.tar';
 
 export async function POST(req) {
   try {
     const { html } = await req.json();
 
     const browser = await puppeteer.launch({
+      // Use chromium args, and headless:'shell' (recommended by Sparticuz)
       args: puppeteer.defaultArgs({ args: chromium.args, headless: 'shell' }),
-      executablePath: await chromium.executablePath(),
+      executablePath: await chromium.executablePath(PACK_URL), // <-- REQUIRED for -min
       headless: 'shell',
       defaultViewport: chromium.defaultViewport ?? { width: 1280, height: 800 },
       ignoreHTTPSErrors: true,
@@ -25,11 +24,13 @@ export async function POST(req) {
 
     const page = await browser.newPage();
     await page.setContent(html ?? '<div/>', { waitUntil: 'networkidle0' });
+
     const pdf = await page.pdf({
       format: 'A4',
       printBackground: true,
       margin: { top: '1cm', right: '1cm', bottom: '1cm', left: '1cm' },
     });
+
     await browser.close();
 
     return new Response(pdf, {
