@@ -5,18 +5,21 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-// Use the ARCH-SPECIFIC pack tar (x64 for Vercel Node.js lambdas)
+// IMPORTANT: direct asset, not the HTML page.
+// Use the x64 pack that includes al2023 libs and brotli-compressed components.
 const PACK_URL =
-  'https://github.com/Sparticuz/chromium/releases/download/v129.0.0/chromium-v129.0.0-pack.x64.tar';
+  'https://github.com/Sparticuz/chromium/releases/download/v129.0.0/chromium-v129.0.0-pack.x64.tar.br';
 
 export async function POST(req) {
   try {
     const { html } = await req.json();
 
+    // (Some builds benefit from disabling graphics on serverless)
+    chromium.setGraphicsMode = false;
+
     const browser = await puppeteer.launch({
-      // Use chromium args, and headless:'shell' (recommended by Sparticuz)
       args: puppeteer.defaultArgs({ args: chromium.args, headless: 'shell' }),
-      executablePath: await chromium.executablePath(PACK_URL), // <-- REQUIRED for -min
+      executablePath: await chromium.executablePath(PACK_URL),
       headless: 'shell',
       defaultViewport: chromium.defaultViewport ?? { width: 1280, height: 800 },
       ignoreHTTPSErrors: true,
@@ -24,7 +27,6 @@ export async function POST(req) {
 
     const page = await browser.newPage();
     await page.setContent(html ?? '<div/>', { waitUntil: 'networkidle0' });
-
     const pdf = await page.pdf({
       format: 'A4',
       printBackground: true,
@@ -32,7 +34,6 @@ export async function POST(req) {
     });
 
     await browser.close();
-
     return new Response(pdf, {
       headers: {
         'Content-Type': 'application/pdf',
