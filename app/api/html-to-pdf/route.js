@@ -1,55 +1,44 @@
-// app/api/html-to-pdf/route.js
 import chromium from '@sparticuz/chromium-min';
 import puppeteer from 'puppeteer-core';
 
-// Ensure Node.js runtime (not Edge) and allow longer runs on Pro
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;           // adjust per your plan/needs
-export const preferredRegion = 'iad1';    // optional, close to your logs
+export const maxDuration = 60;
 
-// Latest pack URL for your chosen Chromium version (example: v129)
-const CHROMIUM_PACK_URL =
-  'https://github.com/Sparticuz/chromium/releases/download/v129.0.0/chromium-v129.0.0-pack.tar';
+const PACK_URL =
+  'https://github.com/Sparticuz/chromium/releases/download/v129.0.0/chromium-v129.0.0-pack.x64.tar';
+// For newer bundles, use the newest tag (e.g., v137.x) that matches your puppeteer/chrome target.
+// See releases page for the exact filename. :contentReference[oaicite:2]{index=2}
 
-export async function POST(request) {
+export async function POST(req) {
   try {
-    const { html } = await request.json();
-
-    // Optional knobs (read README for details)
-    chromium.setGraphicsMode = false; // keeps WebGL off; default is false
-    // await chromium.font('https://raw.githack.com/googlei18n/noto-emoji/master/fonts/NotoColorEmoji.ttf'); // if you need emoji
-
-    const executablePath = await chromium.executablePath(CHROMIUM_PACK_URL);
+    const { html } = await req.json();
 
     const browser = await puppeteer.launch({
-      // per @sparticuz/chromium README: use defaultArgs and headless:'shell'
       args: puppeteer.defaultArgs({ args: chromium.args, headless: 'shell' }),
-      defaultViewport: chromium.defaultViewport ?? { width: 1280, height: 800 },
-      executablePath,
+      executablePath: await chromium.executablePath(PACK_URL),
       headless: 'shell',
+      defaultViewport: chromium.defaultViewport ?? { width: 1280, height: 800 },
       ignoreHTTPSErrors: true,
     });
 
     const page = await browser.newPage();
-    await page.setContent(html ?? '<div />', { waitUntil: 'networkidle0' });
-
-    const pdfBuffer = await page.pdf({
+    await page.setContent(html ?? '<div/>', { waitUntil: 'networkidle0' });
+    const pdf = await page.pdf({
       format: 'A4',
       printBackground: true,
-      margin: { top: '1cm', right: '1cm', bottom: '1cm', left: '1cm' }, // <-- no "as const" here
+      margin: { top: '1cm', right: '1cm', bottom: '1cm', left: '1cm' },
     });
-
     await browser.close();
 
-    return new Response(pdfBuffer, {
+    return new Response(pdf, {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': 'attachment; filename="output.pdf"',
       },
     });
-  } catch (error) {
-    console.error('Error generating PDF:', error);
+  } catch (e) {
+    console.error('Error generating PDF:', e);
     return new Response(JSON.stringify({ error: 'Failed to generate PDF' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
