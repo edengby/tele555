@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 const PACK_URL =
-  'https://github.com/Sparticuz/chromium/releases/download/v129.0.0/chromium-v129.0.0-pack.x64.tar';
+  'https://github.com/Sparticuz/chromium/releases/download/v129.0.0/chromium-v129.0.0-pack.tar';
 // For newer bundles, use the newest tag (e.g., v137.x) that matches your puppeteer/chrome target.
 // See releases page for the exact filename. :contentReference[oaicite:2]{index=2}
 
