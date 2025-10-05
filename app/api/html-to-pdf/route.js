@@ -1,59 +1,58 @@
-// Force Node runtime (Puppeteer needs Node, not Edge)
-export const runtime = 'nodejs';
-// In case you ever statically optimize pages, keep this dynamic
-export const dynamic = 'force-dynamic';
-
+// app/api/html-to-pdf/route.js
 import chromium from '@sparticuz/chromium-min';
 import puppeteer from 'puppeteer-core';
-import { NextResponse } from 'next/server';
 
-// Optional: tighten PDF defaults here
-const pdfOptions = {
-  format: 'A4',
-  printBackground: true,
-  margin: { top: '1cm', right: '1cm', bottom: '1cm', left: '1cm' } as const,
-};
+// Ensure Node.js runtime (not Edge) and allow longer runs on Pro
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;           // adjust per your plan/needs
+export const preferredRegion = 'iad1';    // optional, close to your logs
 
-async function launchBrowser() {
-  // chromium-min works in serverless; the pack URL avoids the “binary too large” issues
-  const executablePath = await chromium.executablePath(
-    'https://github.com/Sparticuz/chromium/releases/download/v129.0.0/chromium-v129.0.0-pack.tar'
-  );
+// Latest pack URL for your chosen Chromium version (example: v129)
+const CHROMIUM_PACK_URL =
+  'https://github.com/Sparticuz/chromium/releases/download/v129.0.0/chromium-v129.0.0-pack.tar';
 
-  return puppeteer.launch({
-    args: [...chromium.args, '--hide-scrollbars', '--disable-web-security'],
-    defaultViewport: chromium.defaultViewport,
-    executablePath,
-    headless: chromium.headless,
-    ignoreHTTPSErrors: true,
-  });
-}
-
-export async function POST(request: Request) {
+export async function POST(request) {
   try {
     const { html } = await request.json();
 
-    if (typeof html !== 'string' || html.trim().length === 0) {
-      return NextResponse.json({ error: 'Missing "html" in request body' }, { status: 400 });
-    }
+    // Optional knobs (read README for details)
+    chromium.setGraphicsMode = false; // keeps WebGL off; default is false
+    // await chromium.font('https://raw.githack.com/googlei18n/noto-emoji/master/fonts/NotoColorEmoji.ttf'); // if you need emoji
 
-    const browser = await launchBrowser();
+    const executablePath = await chromium.executablePath(CHROMIUM_PACK_URL);
+
+    const browser = await puppeteer.launch({
+      // per @sparticuz/chromium README: use defaultArgs and headless:'shell'
+      args: puppeteer.defaultArgs({ args: chromium.args, headless: 'shell' }),
+      defaultViewport: chromium.defaultViewport ?? { width: 1280, height: 800 },
+      executablePath,
+      headless: 'shell',
+      ignoreHTTPSErrors: true,
+    });
+
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
+    await page.setContent(html ?? '<div />', { waitUntil: 'networkidle0' });
 
-    const pdfBuffer = await page.pdf(pdfOptions);
+    const pdfBuffer = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '1cm', right: '1cm', bottom: '1cm', left: '1cm' }, // <-- no "as const" here
+    });
+
     await browser.close();
 
     return new Response(pdfBuffer, {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': 'attachment; filename="output.pdf"',
-        // (optional) avoids some proxy buffer issues
-        'Cache-Control': 'no-store',
       },
     });
-  } catch (err) {
-    console.error('Error generating PDF:', err);
-    return NextResponse.json({ error: 'Failed to generate PDF' }, { status: 500 });
+  } catch (error) {
+    console.error('Error generating PDF:', error);
+    return new Response(JSON.stringify({ error: 'Failed to generate PDF' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 }
