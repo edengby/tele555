@@ -1,33 +1,44 @@
+// app/api/html-to-pdf/route.js
 import chromium from '@sparticuz/chromium';
 import puppeteer from 'puppeteer-core';
+import fs from 'node:fs';
 
-export const runtime = 'nodejs';        // not Edge
+export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;          // adjust to your plan
+export const maxDuration = 60;
 
 export async function POST(req) {
   try {
     const { html } = await req.json();
 
-    // Make sure the loader sees the extracted libs
-    // Sparticuz sets this internally, but we also ensure it explicitly:
-    const libDirs = [
-      process.env.LD_LIBRARY_PATH,
-      '/tmp/chromium',                  // chromium extracts here
-      '/tmp/chromium-pack/al2023',      // NSS/NSPR live here
-    ].filter(Boolean);
-    process.env.LD_LIBRARY_PATH = libDirs.join(':');
+    // Ensure Sparticuz extracts binaries/libs and give us the path
+    const exePath = await chromium.executablePath();
 
-    // Optional: keep graphics off in serverless
+    // Build a lib path that includes where Sparticuz drops NSS/NSPR for AL2023
+    const al2023Dir = '/tmp/chromium-pack/al2023';
+    const chromiumDir = '/tmp/chromium';
+    const libPath = [al2023Dir, chromiumDir, process.env.LD_LIBRARY_PATH]
+        .filter(Boolean)
+        .join(':');
+
+    // (Optional) sanity check so logs will prove the files are there
+    const nsprOk = fs.existsSync(`${al2023Dir}/libnspr4.so`);
+
+    // Keep graphics off in serverless
     chromium.setGraphicsMode = false;
 
     const browser = await puppeteer.launch({
-      // Headless 'shell' is recommended by Sparticuz for serverless
       args: puppeteer.defaultArgs({ args: chromium.args, headless: 'shell' }),
-      executablePath: await chromium.executablePath(), // **NO URL here**
+      executablePath: exePath,
       headless: 'shell',
       defaultViewport: chromium.defaultViewport ?? { width: 1280, height: 800 },
       ignoreHTTPSErrors: true,
+
+      // IMPORTANT: ensure the Chromium child sees the libs
+      env: {
+        ...process.env,
+        LD_LIBRARY_PATH: libPath,
+      },
     });
 
     const page = await browser.newPage();
@@ -39,6 +50,10 @@ export async function POST(req) {
     });
 
     await browser.close();
+
+    // Optional: log once to confirm libs were present
+    if (!nsprOk) console.error('Warning: libnspr4.so not found at', al2023Dir);
+
     return new Response(pdf, {
       headers: {
         'Content-Type': 'application/pdf',
