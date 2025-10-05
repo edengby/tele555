@@ -9,6 +9,7 @@ const PACK_URL =
   'https://github.com/Sparticuz/chromium/releases/download/v129.0.0/chromium-v129.0.0-pack.tar';
 // For newer bundles, use the newest tag (e.g., v137.x) that matches your puppeteer/chrome target.
 // See releases page for the exact filename. :contentReference[oaicite:2]{index=2}
+// app/api/html-to-pdf/route.js
 
 export async function POST(req) {
   try {
@@ -16,7 +17,7 @@ export async function POST(req) {
 
     const browser = await puppeteer.launch({
       args: puppeteer.defaultArgs({ args: chromium.args, headless: 'shell' }),
-      executablePath: await chromium.executablePath(PACK_URL),
+      executablePath: await chromium.executablePath(),
       headless: 'shell',
       defaultViewport: chromium.defaultViewport ?? { width: 1280, height: 800 },
       ignoreHTTPSErrors: true,
